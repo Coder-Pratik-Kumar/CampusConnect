@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Review from '../models/Review.js';
 import Session from '../models/Session.js';
 import User from '../models/User.js';
+import { createNotificationInternal } from './notificationController.js';
 
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -109,6 +110,16 @@ export const createReview = async (req, res, next) => {
     const populatedReview = await Review.findById(newReview._id)
       .populate('reviewerId', 'name avatar college major')
       .populate('receiverId', 'name avatar college major rating reviewsCount');
+
+    // Notification: notify the review recipient
+    await createNotificationInternal({
+      recipientId: receiverId,
+      senderId: reviewerId,
+      type: 'review_received',
+      title: 'New Review Received',
+      message: `${req.user.name} left you a ${numRating}-star review!`,
+      link: `/reviews`,
+    });
 
     return res.status(201).json({
       status: 'success',

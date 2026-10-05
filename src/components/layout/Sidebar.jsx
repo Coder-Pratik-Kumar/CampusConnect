@@ -1,16 +1,16 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../hooks/useNotifications';
 import { BrandLogo } from '../common/BrandLogo';
-import { navigationLinks, secondaryNavigationLinks, mockCurrentUser } from '../../data/mockData';
+import { navigationLinks, secondaryNavigationLinks } from '../../data/mockData';
 import { Avatar } from '../ui/Avatar';
 import { X, LogOut } from 'lucide-react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-
-  const currentUser = user || mockCurrentUser;
+  const { unreadCount } = useNotifications();
 
   const handleLogout = () => {
     logout();
@@ -97,6 +97,12 @@ export const Sidebar = ({ isOpen, onClose }) => {
                     {item.badge}
                   </span>
                 )}
+                {/* Dynamic unread badge for Notifications */}
+                {item.name === 'Notifications' && !item.badge && unreadCount > 0 && (
+                  <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 text-[11px] font-bold rounded-full bg-rose-500 text-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </NavLink>
             );
           })}
@@ -106,15 +112,17 @@ export const Sidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-t border-slate-100 space-y-2">
           <button
             onClick={() => {
-              navigate(`/profile/${currentUser.id || currentUser._id}`);
+              if (user?.id || user?._id) {
+                navigate(`/profile/${user.id || user._id}`);
+              }
               if (onClose) onClose();
             }}
             className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-slate-50 transition-colors text-left focus:outline-none"
           >
-            <Avatar src={currentUser.avatar} name={currentUser.name} size="md" />
+            <Avatar src={user?.avatar} name={user?.name || 'Student'} size="md" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
-              <p className="text-[11px] text-slate-500 font-medium truncate">{currentUser.college || currentUser.email || 'Student'}</p>
+              <p className="text-xs font-bold text-slate-900 truncate">{user?.name || 'Student'}</p>
+              <p className="text-[11px] text-slate-500 font-medium truncate">{user?.college || user?.email || 'GLA University'}</p>
             </div>
           </button>
 

@@ -5,7 +5,7 @@ import { apiFetch } from '../utils/api';
  * Hook to fetch and manage the authenticated user's profile.
  * Wraps GET /api/profile and PUT /api/profile.
  */
-export const useProfile = () => {
+export const useProfile = (userId = null) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -13,13 +13,15 @@ export const useProfile = () => {
   const [successMsg, setSuccessMsg] = useState(null);
 
   /**
-   * Fetch the authenticated user's profile from the backend.
+   * Fetch profile from the backend.
+   * If userId is provided, fetches GET /profile/:id, otherwise GET /profile.
    */
   const fetchProfile = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch('/profile');
+      const endpoint = userId ? `/profile/${userId}` : '/profile';
+      const res = await apiFetch(endpoint);
       if (res.status === 'success' && res.data?.user) {
         setProfile(res.data.user);
       } else {
@@ -30,7 +32,7 @@ export const useProfile = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   /**
    * Update the authenticated user's profile.

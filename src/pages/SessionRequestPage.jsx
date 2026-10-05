@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { mockPeerUser } from '../data/mockData';
+import { Avatar } from '../components/ui/Avatar';
+import { useMatches } from '../hooks/useMatches';
+import { useSessions } from '../hooks/useSessions';
 import {
   Calendar,
   Clock,
@@ -14,37 +16,104 @@ import {
   ChevronRight,
   Send,
   Info,
+  AlertCircle,
+  RotateCw,
+  Sparkles,
 } from 'lucide-react';
 
 export const SessionRequestPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { matches, loading: matchesLoading } = useMatches();
+  const { createSession, submitting, error: apiError } = useSessions();
 
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
-  const months = ['October 2023', 'November 2023', 'December 2023'];
+  // Extract query parameters
+  const queryParams = new URLSearchParams(location.search);
+  const queryPeerId = queryParams.get('peerId');
+  const querySkill = queryParams.get('skill');
 
-  const prevMonth = () => {
-    setCurrentMonthIndex((prev) => (prev > 0 ? prev - 1 : months.length - 1));
-  };
+  const initialPeer = location.state?.peer || null;
 
-  const nextMonth = () => {
-    setCurrentMonthIndex((prev) => (prev < months.length - 1 ? prev + 1 : 0));
-  };
+  const [selectedPeerId, setSelectedPeerId] = useState(queryPeerId || initialPeer?.id || '');
+  const [selectedSkill, setSelectedSkill] = useState(querySkill || '');
+  const [learningNotes, setLearningNotes] = useState('');
+  const [selectedTime, setSelectedTime] = useState('7:00 PM');
+  const [selectedDuration, setSelectedDuration] = useState('60 Min');
+  const [formError, setFormError] = useState('');
 
-  const daysList = [
-    { day: 'Mon', date: 1 },
-    { day: 'Tue', date: 2 },
-    { day: 'Wed', date: 3 },
-    { day: 'Thu', date: 4 },
-    { day: 'Fri', date: 5 },
-  ];
+  // Default to tomorrow's date formatted YYYY-MM-DD
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDateStr = tomorrow.toISOString().split('T')[0];
+
+  const [selectedDateStr, setSelectedDateStr] = useState(defaultDateStr);
+
+  // Synchronize target peer from matches if queryPeerId is present
+  const targetMatch = matches.find(
+    (m) => (m.user?.id || m.user?._id) === selectedPeerId
+  );
+  const targetPeer = initialPeer || (targetMatch ? {
+    id: targetMatch.user?.id || targetMatch.user?._id,
+    name: targetMatch.user?.name,
+    avatar: targetMatch.user?.avatar,
+    college: targetMatch.user?.college,
+    major: targetMatch.user?.major,
+    rating: targetMatch.user?.rating ? Number(targetMatch.user.rating).toFixed(1) : '5.0',
+    sessionsCount: targetMatch.user?.sessionsCount || 0,
+    teachSkills: targetMatch.user?.teachSkills || [],
+  } : null);
+
+  // Set default providerId if matches arrive and no peer is selected
+  useEffect(() => {
+    if (!selectedPeerId && matches.length > 0) {
+      const firstPeerId = matches[0].user?.id || matches[0].user?._id;
+      setSelectedPeerId(firstPeerId);
+    }
+  }, [matches, selectedPeerId]);
+
+  // Set default skill from peer's teach skills if not prefilled
+  useEffect(() => {
+    if (!selectedSkill && targetPeer?.teachSkills?.length > 0) {
+      setSelectedSkill(targetPeer.teachSkills[0]);
+    }
+  }, [targetPeer, selectedSkill]);
 
   const durations = ['30 Min', '60 Min', '90 Min'];
   const timeslots = ['6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM'];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert(`Session request sent to Rahul Sharma for ${months[currentMonthIndex]}, Date ${selectedDate} at ${selectedTime}!`);
-    navigate('/sessions');
+    setFormError('');
+
+    if (!selectedPeerId) {
+      setFormError('Please select a peer to request a session with.');
+      return;
+    }
+
+    if (!selectedSkill.trim()) {
+      setFormError('Please specify the skill you want to learn.');
+      return;
+    }
+
+    if (!selectedDateStr) {
+      setFormError('Please select a valid date for the session.');
+      return;
+    }
+
+    try {
+      await createSession({
+        providerId: selectedPeerId,
+        skill: selectedSkill.trim(),
+        date: selectedDateStr,
+        time: selectedTime,
+        duration: selectedDuration,
+        message: learningNotes.trim(),
+      });
+
+      navigate('/sessions');
+    } catch (err) {
+      setFormError(err.message || 'Failed to submit session request');
+    }
   };
 
   return (
@@ -54,41 +123,83 @@ export const SessionRequestPage = () => {
         <h1 className="text-3xl sm:text-4xl font-extrabold text-brand-text font-heading tracking-tight">
           Request a Learning Session
         </h1>
-        <p className="text-xs sm:text-sm text-brand-muted mt-1">
-          Select an available time to connect with Rahul. Prepare specific questions to make the most of your session.
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          Select an available time to connect with your peer mentor. Prepare specific questions to make the most of your session.
         </p>
       </div>
 
+      {/* Form Error Banner */}
+      {(formError || apiError) && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4 flex items-center gap-3 text-xs sm:text-sm">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <span>{formError || apiError}</span>
+        </div>
+      )}
+
       {/* Main Grid Layout */}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Mentor Info & Stats */}
+        {/* Left Column: Peer Info & Stats */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Mentor Profile Card */}
-          <div className="bg-[#EEF2FF]/70 border border-indigo-100/60 rounded-3xl p-6 text-center space-y-3 flex flex-col items-center">
-            <img
-              src={mockPeerUser.avatar}
-              alt={mockPeerUser.name}
+          {/* Peer Selector / Details Card */}
+          <div className="bg-[#EEF2FF]/70 border border-indigo-100/60 rounded-3xl p-6 text-center space-y-4 flex flex-col items-center">
+            {/* If multiple matches available, allow switching target peer */}
+            {matches.length > 1 && (
+              <div className="w-full text-left">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1">
+                  SELECT MENTOR
+                </label>
+                <select
+                  value={selectedPeerId}
+                  onChange={(e) => {
+                    setSelectedPeerId(e.target.value);
+                    const match = matches.find((m) => (m.user?.id || m.user?._id) === e.target.value);
+                    if (match?.user?.teachSkills?.[0]) {
+                      setSelectedSkill(match.user.teachSkills[0]);
+                    }
+                  }}
+                  className="w-full bg-white border border-indigo-100 rounded-xl px-3 py-2 text-xs font-bold text-brand-text focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                >
+                  {matches.map((m) => {
+                    const mId = m.user?.id || m.user?._id;
+                    return (
+                      <option key={mId} value={mId}>
+                        {m.user?.name} ({m.matchScore}% Match)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            <Avatar
+              src={targetPeer?.avatar}
+              name={targetPeer?.name || 'Peer Mentor'}
+              size="xl"
               className="h-24 w-24 rounded-full object-cover shadow-soft border-4 border-white"
             />
             <div>
               <h2 className="font-heading font-extrabold text-xl text-brand-text">
-                {mockPeerUser.name}
+                {targetPeer?.name || 'Peer Mentor'}
               </h2>
               <p className="text-xs font-medium text-slate-500 mt-0.5">
-                React & Frontend Architecture
+                {targetPeer?.major || 'Student'} {targetPeer?.college ? `at ${targetPeer.college}` : ''}
               </p>
             </div>
 
             {/* Skill Tags */}
-            <div className="flex flex-wrap justify-center gap-1.5 pt-2">
-              {['React', 'Redux', 'Next.js'].map((skill) => (
-                <span
-                  key={skill}
-                  className="bg-white/80 border border-indigo-100 text-brand-primary text-xs font-semibold px-3 py-1 rounded-full shadow-2xs"
-                >
-                  {skill}
-                </span>
-              ))}
+            <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+              {targetPeer?.teachSkills?.length > 0 ? (
+                targetPeer.teachSkills.map((s) => (
+                  <span
+                    key={s}
+                    className="bg-white/80 border border-indigo-100 text-brand-primary text-xs font-semibold px-3 py-1 rounded-full shadow-2xs"
+                  >
+                    {s}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-400 italic">No skills listed</span>
+              )}
             </div>
           </div>
 
@@ -104,15 +215,15 @@ export const SessionRequestPage = () => {
                   <Star className="h-4 w-4 text-amber-500" />
                   <span>Rating</span>
                 </div>
-                <span className="font-bold text-brand-text">4.9/5.0</span>
+                <span className="font-bold text-brand-text">{targetPeer?.rating || '5.0'}/5.0</span>
               </div>
 
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-600 font-medium">
                   <GraduationCap className="h-4 w-4 text-indigo-600" />
-                  <span>Sessions</span>
+                  <span>Completed Sessions</span>
                 </div>
-                <span className="font-bold text-brand-text">142</span>
+                <span className="font-bold text-brand-text">{targetPeer?.sessionsCount || 0}</span>
               </div>
 
               <div className="flex items-center justify-between text-xs">
@@ -129,48 +240,39 @@ export const SessionRequestPage = () => {
         {/* Right Column: Date, Time & Request Form */}
         <div className="lg:col-span-8">
           <Card className="border-indigo-50 shadow-soft-sm rounded-3xl p-6 sm:p-8 space-y-6">
-            {/* Section 1: Select Date */}
+            {/* Section 0: Topic / Skill to Learn */}
             <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-brand-primary" />
+                <h2 className="font-heading font-bold text-xl text-brand-text">Skill / Topic to Learn</h2>
+              </div>
+              <input
+                type="text"
+                value={selectedSkill}
+                onChange={(e) => setSelectedSkill(e.target.value)}
+                placeholder="E.g. React, Python, Data Structures, Figma..."
+                className="w-full bg-[#F9F9FF] border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-brand-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all"
+                required
+              />
+            </div>
+
+            {/* Section 1: Select Date */}
+            <div className="space-y-3 pt-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-brand-primary" />
                   <h2 className="font-heading font-bold text-xl text-brand-text">Select Date</h2>
                 </div>
-
-                <div className="flex items-center gap-3 text-xs font-semibold text-slate-600">
-                  <button type="button" onClick={prevMonth} className="hover:text-brand-primary flex items-center gap-0.5 focus:outline-none">
-                    <ChevronLeft className="h-4 w-4" />
-                    <span>Prev</span>
-                  </button>
-                  <span className="font-bold text-brand-text min-w-[100px] text-center">{months[currentMonthIndex]}</span>
-                  <button type="button" onClick={nextMonth} className="hover:text-brand-primary flex items-center gap-0.5 focus:outline-none">
-                    <span>Next</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
 
-              {/* Days Selector */}
-              <div className="grid grid-cols-5 gap-2 sm:gap-3 pt-1">
-                {daysList.map((item) => {
-                  const isSelected = selectedDate === item.date;
-                  return (
-                    <button
-                      type="button"
-                      key={item.date}
-                      onClick={() => setSelectedDate(item.date)}
-                      className={`flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-2xl transition-all focus:outline-none ${
-                        isSelected
-                          ? 'bg-brand-primary text-white shadow-soft font-bold'
-                          : 'bg-[#F4F4FD] hover:bg-indigo-100/60 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <span className="text-[11px] uppercase opacity-80">{item.day}</span>
-                      <span className="text-lg font-extrabold font-heading mt-1">{item.date}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <input
+                type="date"
+                value={selectedDateStr}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setSelectedDateStr(e.target.value)}
+                className="w-full sm:w-auto bg-[#F9F9FF] border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-brand-text focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all"
+                required
+              />
             </div>
 
             {/* Section 2: Duration & Time */}
@@ -235,7 +337,7 @@ export const SessionRequestPage = () => {
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-brand-primary" />
                 <h3 className="font-heading font-bold text-lg text-brand-text">
-                  What do you want to learn?
+                  Session Notes / Questions
                 </h3>
               </div>
 
@@ -244,12 +346,12 @@ export const SessionRequestPage = () => {
                   rows={4}
                   value={learningNotes}
                   onChange={(e) => setLearningNotes(e.target.value)}
-                  placeholder="E.g., I'm struggling with Redux Toolkit setup in my current project and would love a walkthrough..."
-                  className="w-full bg-[#F9F9FF] border border-slate-200 rounded-2xl p-4 text-sm text-brand-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all resize-none"
+                  placeholder="E.g., I'm struggling with state management in React and would love a 1-on-1 walkthrough..."
+                  className="w-full bg-[#F9F9FF] border border-slate-200 rounded-2xl p-4 text-xs text-brand-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all resize-none"
                 />
                 <div className="flex items-center justify-end gap-1 text-[11px] text-slate-400">
                   <Info className="h-3 w-3" />
-                  <span>Markdown supported</span>
+                  <span>Optional session message</span>
                 </div>
               </div>
             </div>
@@ -259,11 +361,12 @@ export const SessionRequestPage = () => {
               <Button
                 type="submit"
                 variant="primary"
-                icon={Send}
+                icon={submitting ? RotateCw : Send}
                 iconPosition="right"
+                disabled={submitting}
                 className="py-3 px-6"
               >
-                Send Session Request
+                {submitting ? 'Sending Request...' : 'Send Session Request'}
               </Button>
             </div>
           </Card>
@@ -272,3 +375,4 @@ export const SessionRequestPage = () => {
     </div>
   );
 };
+

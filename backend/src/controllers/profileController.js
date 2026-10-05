@@ -1,4 +1,7 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
+
+const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 /**
  * Helper to build a sanitized user object (strips password).
@@ -31,6 +34,41 @@ const VALID_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Sat
 export const getProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User profile not found',
+      });
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        user: safeUser(user),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @route   GET /api/profile/:id
+ * @desc    Get a peer user's public profile by ID
+ * @access  Protected
+ */
+export const getProfileById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid user ID format',
+      });
+    }
+
+    const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({
         status: 'fail',

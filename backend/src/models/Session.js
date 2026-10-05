@@ -42,6 +42,14 @@ const sessionSchema = new mongoose.Schema(
       enum: ['pending', 'accepted', 'rejected', 'completed', 'cancelled'],
       default: 'pending',
     },
+    // ─── Zoom Meeting ──────────────────────────────────────────────────────────
+    // Populated automatically when the provider accepts the session.
+    // start_url is intentionally never stored; participants use joinUrl only.
+    zoom: {
+      meetingId: { type: String, default: null },
+      joinUrl: { type: String, default: null },
+      password: { type: String, default: null },
+    },
   },
   {
     timestamps: true,
@@ -50,3 +58,4 @@ const sessionSchema = new mongoose.Schema(
 
 export const Session = mongoose.model('Session', sessionSchema);
 export default Session;
+

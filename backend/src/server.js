@@ -8,13 +8,24 @@ import profileRoutes from './routes/profileRoutes.js';
 import matchRoutes from './routes/matchRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
-import './models/index.js'; // Registers all Mongoose models (User, Skill, Session, Review)
+import './models/index.js'; // Registers all Mongoose models (User, Skill, Session, Review, Notification)
 
 const app = express();
 
 // ── Global Middleware ──
-app.use(cors({ origin: config.clientUrl, credentials: true }));
+const allowedOrigins = [config.clientUrl, 'http://localhost:3000', 'http://localhost:5173'].filter(Boolean);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -25,6 +36,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api', reviewRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ── Fallback & Error Handling Middleware ──
 app.use(notFoundHandler);

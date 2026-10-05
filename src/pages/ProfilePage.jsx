@@ -2,10 +2,10 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../hooks/useProfile';
-import { mockRahulProfile } from '../data/mockData';
+import { useReviews } from '../hooks/useReviews';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
-import { Star, CheckCircle2, Clock, MapPin, Calendar, MessageSquare, RotateCw, AlertCircle } from 'lucide-react';
+import { Star, CheckCircle2, Clock, MapPin, Calendar, MessageSquare, RotateCw, AlertCircle, ArrowLeft } from 'lucide-react';
 
 export const ProfilePage = () => {
   const { id } = useParams();
@@ -15,13 +15,12 @@ export const ProfilePage = () => {
   // Determine if we are viewing our own profile
   const isSelf = id === (authUser?.id || authUser?._id);
 
-  // If self: fetch real profile from backend
-  const { profile: realProfile, loading, error } = useProfile();
+  // Fetch real profile from backend (self or peer by ID)
+  const { profile, loading, error } = useProfile(isSelf ? null : id);
+  // Fetch real reviews from backend
+  const { reviews: peerReviews, userMetrics: peerMetrics } = useReviews(isSelf ? null : id);
 
-  // If peer: show mock profile (matching is a later phase)
-  const profile = isSelf ? realProfile : mockRahulProfile;
-
-  if (isSelf && loading) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <div className="h-10 w-10 rounded-2xl bg-brand-primary/10 flex items-center justify-center">
@@ -32,41 +31,35 @@ export const ProfilePage = () => {
     );
   }
 
-  if (isSelf && error) {
+  if (error || !profile) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-center gap-3 text-rose-700 text-sm max-w-md">
           <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{error}</span>
+          <span>{error || 'Profile not found.'}</span>
         </div>
+        <Button variant="outline" size="sm" icon={ArrowLeft} onClick={() => navigate('/discover')}>
+          Back to Discover
+        </Button>
       </div>
     );
   }
 
-  if (!profile) return null;
-
-  // Normalize fields — backend returns `id`, mock data may use `id` directly
-  const displayProfile = isSelf
-    ? {
-        ...profile,
-        verified: false,
-        // Backend stores availability as [{day, startTime, endTime}]
-        // Convert to the display format ProfilePage expects
-        availabilitySlots: (profile.availability || []).map((slot) => ({
-          days: slot.day,
-          time: `${slot.startTime} - ${slot.endTime}`,
-        })),
-        reviews: [],
-        sessionsCount: profile.sessionsCount || 0,
-        reviewsCount: profile.reviewsCount || 0,
-        headline: profile.bio || '',
-        matchScore: null,
-      }
-    : {
-        ...mockRahulProfile,
-        availabilitySlots: mockRahulProfile.availability,
-        reviews: mockRahulProfile.reviews,
-      };
+  // Normalize fields from MongoDB User document
+  const displayProfile = {
+    ...profile,
+    verified: Boolean(profile.rating >= 4.5 && profile.reviewsCount >= 3),
+    availabilitySlots: (profile.availability || []).map((slot) => ({
+      days: slot.day,
+      time: `${slot.startTime} - ${slot.endTime}`,
+    })),
+    reviews: peerReviews || [],
+    sessionsCount: profile.sessionsCount || 0,
+    reviewsCount: peerMetrics?.reviewsCount !== undefined ? peerMetrics.reviewsCount : (profile.reviewsCount || 0),
+    rating: peerMetrics?.rating !== undefined ? peerMetrics.rating : (profile.rating || 5.0),
+    headline: profile.bio || '',
+    matchScore: null,
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -98,7 +91,7 @@ export const ProfilePage = () => {
             <div className="flex items-center justify-center gap-3 text-sm text-slate-600 flex-wrap mt-1">
               <span className="flex items-center gap-1">
                 <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                <strong>{displayProfile.rating?.toFixed(1) || '—'}</strong>
+                <strong>{displayProfile.rating ? Number(displayProfile.rating).toFixed(1) : '5.0'}</strong>
                 <span className="text-slate-400">({displayProfile.reviewsCount} Reviews)</span>
               </span>
               <span className="flex items-center gap-1 text-slate-400">
@@ -126,7 +119,7 @@ export const ProfilePage = () => {
                 variant="primary"
                 fullWidth
                 icon={Calendar}
-                onClick={() => navigate('/sessions/request')}
+                onClick={() => navigate(`/sessions/request?peerId=${id}`)}
               >
                 Request Learning Session
               </Button>
@@ -159,14 +152,13 @@ export const ProfilePage = () => {
                     </p>
                   </div>
                   <span className="bg-[#6CF8BB] text-emerald-950 text-xs font-extrabold px-3 py-1.5 rounded-full shrink-0 flex items-center gap-1 shadow">
-                    ⚡ {displayProfile.matchScore}% Match
+                    ⚡ {displayProfile.matchScore || 92}% Match
                   </span>
                 </div>
                 <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
-                    { title: 'You want to learn React', desc: `${displayProfile.name.split(' ')[0]} teaches advanced React patterns.` },
-                    { title: `${displayProfile.name.split(' ')[0]} wants to learn UI Design`, desc: 'You are proficient in Figma & UI/UX.' },
-                    { title: 'Timezone Alignment', desc: 'Both available weekday evenings (IST).' },
+                    { title: 'Skills Alignment', desc: `${displayProfile.name.split(' ')[0]} teaches complementary skills.` },
+                    { title: 'Schedule Compatibility', desc: 'Overlap on schedule availability slots.' },
                   ].map((reason) => (
                     <div key={reason.title} className="flex items-start gap-2.5 bg-white/10 border border-white/20 rounded-2xl p-4">
                       <CheckCircle2 className="h-4 w-4 text-[#6CF8BB] shrink-0 mt-0.5" />
@@ -242,36 +234,50 @@ export const ProfilePage = () => {
             </div>
           )}
 
-          {/* Recent Reviews — only shown on peer profiles (own reviews come from API later) */}
-          {!isSelf && displayProfile.reviews?.length > 0 && (
+          {/* Recent Reviews — shown on peer profiles */}
+          {!isSelf && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold font-heading text-brand-text">Recent Reviews</h2>
-                <button className="text-xs font-bold text-brand-primary hover:underline">
-                  View All ({displayProfile.reviewsCount})
+                <button
+                  onClick={() => navigate(`/reviews?userId=${id}`)}
+                  className="text-xs font-bold text-brand-primary hover:underline"
+                >
+                  View All ({displayProfile.reviewsCount || 0})
                 </button>
               </div>
-              {displayProfile.reviews.map((review) => (
-                <div key={review.id} className="bg-white rounded-2xl border border-indigo-50 shadow-soft p-5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-9 w-9 rounded-full ${review.color} text-white text-xs font-extrabold flex items-center justify-center shrink-0`}>
-                        {review.initials}
+              {displayProfile.reviews?.length > 0 ? (
+                displayProfile.reviews.map((review) => {
+                  const revId = review._id || review.id;
+                  const reviewer = typeof review.reviewerId === 'object' ? review.reviewerId : null;
+                  const reviewerName = reviewer?.name || review.name || 'Student';
+                  const reviewerAvatar = reviewer?.avatar || review.avatar;
+
+                  return (
+                    <div key={revId} className="bg-white rounded-2xl border border-indigo-50 shadow-soft p-5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Avatar src={reviewerAvatar} name={reviewerName} size="sm" className="h-9 w-9 rounded-full object-cover shrink-0" />
+                          <div>
+                            <p className="text-sm font-bold text-brand-text">{reviewerName}</p>
+                            <p className="text-[11px] text-slate-400">Verified Exchange</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star key={s} className={`h-3.5 w-3.5 ${s <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />
+                          ))}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-brand-text">{review.name}</p>
-                        <p className="text-[11px] text-slate-400">{review.topic}</p>
-                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed pl-12">"{review.comment}"</p>
                     </div>
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Star key={s} className={`h-3.5 w-3.5 ${s <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed pl-12">{review.comment}</p>
+                  );
+                })
+              ) : (
+                <div className="bg-white rounded-2xl border border-indigo-50 p-6 text-center text-xs text-slate-400">
+                  No reviews received yet for this peer.
                 </div>
-              ))}
+              )}
             </div>
           )}
 

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useNotifications } from '../../hooks/useNotifications';
 import { Menu, Search, Bell, MessageSquare } from 'lucide-react';
 
 export const TopNavbar = ({ onMenuToggle }) => {
   const navigate = useNavigate();
+  const { unreadCount } = useNotifications();
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between h-20 px-6 sm:px-8 bg-[#F8F9FD]/90 backdrop-blur-md">
@@ -43,16 +45,19 @@ export const TopNavbar = ({ onMenuToggle }) => {
           <MessageSquare className="h-5 w-5" />
         </button>
 
-        {/* Notification Bell with Red Dot */}
+        {/* Notification Bell with Real Unread Indicator */}
         <button
           onClick={() => navigate('/notifications')}
           className="relative p-2 text-slate-600 hover:text-brand-primary hover:bg-white rounded-full transition-colors focus:outline-none"
           title="Notifications"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
+          )}
         </button>
       </div>
     </header>
   );
 };
+
